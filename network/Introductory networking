@@ -1,0 +1,152 @@
+# TryHackMe — Introductory Networking
+
+**Plataforma:** TryHackMe  
+**Categoria:** Networking / Fundamentos  
+**Dificuldade:** Easy  
+**Status:** ✅ Concluída  
+
+---
+
+## Objetivo
+
+Compreender os fundamentos de redes de computadores — modelos de referência, protocolos, endereçamento e ferramentas de diagnóstico — que formam a base para qualquer atuação em segurança ofensiva ou defensiva.
+
+---
+
+## Modelo OSI — As 7 Camadas
+
+O modelo OSI (Open Systems Interconnection) é o framework teórico que descreve como dados viajam de uma máquina para outra. Cada camada tem uma responsabilidade específica e se comunica apenas com a camada imediatamente acima ou abaixo.
+
+| Camada | Nome | Função | Exemplos |
+|---|---|---|---|
+| 7 | Aplicação | Interface com o usuário/software | HTTP, FTP, DNS, SSH |
+| 6 | Apresentação | Formatação, criptografia, compressão | SSL/TLS, JPEG, ASCII |
+| 5 | Sessão | Abertura e controle de sessões | NetBIOS, RPC |
+| 4 | Transporte | Entrega ponta a ponta, controle de fluxo | TCP, UDP |
+| 3 | Rede | Endereçamento lógico e roteamento | IP, ICMP, ARP |
+| 2 | Enlace | Endereçamento físico (MAC), acesso ao meio | Ethernet, Wi-Fi |
+| 1 | Física | Transmissão de bits brutos | Cabos, sinais elétricos, fibra |
+
+**Por que isso importa para segurança?** Cada camada é um vetor de ataque distinto. Ataques ARP spoofing operam na camada 2. Port scanning atua na camada 4. Injeções SQL na camada 7. Saber em qual camada um ataque ocorre define quais ferramentas usar para detectar e mitigar.
+
+---
+
+## Modelo TCP/IP
+
+O TCP/IP é a implementação prática usada na internet. Comprime as 7 camadas OSI em 4:
+
+| Camada TCP/IP | Equivalente OSI | Protocolos |
+|---|---|---|
+| Aplicação | 5, 6, 7 | HTTP, DNS, FTP, SSH |
+| Transporte | 4 | TCP, UDP |
+| Internet | 3 | IP, ICMP |
+| Acesso à Rede | 1, 2 | Ethernet, Wi-Fi |
+
+---
+
+## TCP vs UDP
+
+A diferença entre os dois protocolos da camada de transporte é fundamental para entender comportamento de serviços e ataques:
+
+**TCP (Transmission Control Protocol)**
+- Orientado a conexão — exige handshake de 3 vias (SYN → SYN-ACK → ACK) antes de transmitir
+- Garante entrega, ordem e integridade dos dados
+- Mais lento, mais confiável
+- Usado por: HTTP, HTTPS, SSH, FTP
+
+**UDP (User Datagram Protocol)**
+- Sem conexão — envia e não espera confirmação
+- Não garante entrega nem ordem
+- Mais rápido, menor overhead
+- Usado por: DNS, DHCP, streaming, VoIP
+
+**Relevância em segurança:** O handshake TCP é explorado em ataques SYN flood — o atacante envia milhares de SYN sem completar o handshake, esgotando recursos do servidor. O UDP, por não ter handshake, é usado em ataques de amplificação DNS.
+
+---
+
+## Endereçamento IPv4 e Sub-redes
+
+Um endereço IPv4 tem 32 bits divididos em 4 octetos (ex: `192.168.1.100`). A máscara de sub-rede define qual parte identifica a rede e qual identifica o host:
+
+```
+IP:     192.168.1.100
+Máscara: 255.255.255.0  (/24)
+Rede:   192.168.1.0
+Hosts:  192.168.1.1 – 192.168.1.254
+```
+
+Entender sub-redes é essencial para varreduras de rede — saber o range `/24` de um alvo significa 254 hosts possíveis para mapear.
+
+---
+
+## DNS — Como Nomes Viram IPs
+
+O DNS (Domain Name System) traduz nomes legíveis (google.com) em endereços IP. O processo:
+
+1. Navegador consulta o resolver local (cache ou `/etc/hosts`)
+2. Se não encontrar, consulta o servidor DNS recursivo do ISP
+3. O resolver consulta os servidores raiz → TLD (`.com`) → autoritativo
+4. Retorna o IP ao cliente
+
+**Relevância em segurança:** DNS é alvo frequente de ataques — DNS spoofing, DNS tunneling (exfiltração de dados via queries), e subdomain enumeration para reconhecimento.
+
+---
+
+## Ferramentas de Diagnóstico
+
+### ping
+Verifica conectividade enviando pacotes ICMP Echo Request ao destino.
+
+```bash
+ping 8.8.8.8          # testa conectividade com o Google DNS
+ping -c 4 alvo.com    # envia apenas 4 pacotes
+```
+
+### traceroute
+Mapeia o caminho dos pacotes entre a origem e o destino, exibindo cada roteador intermediário (hop).
+
+```bash
+traceroute 8.8.8.8
+```
+
+Útil para identificar onde uma conexão falha ou onde há latência anômala. Em pentest, revela a topologia da rede entre você e o alvo.
+
+### whois
+Consulta informações de registro de um domínio ou IP — dono, organização, contatos, datas de registro.
+
+```bash
+whois google.com
+whois 45.33.32.156
+```
+
+Ponto de partida em OSINT e reconhecimento passivo — sem enviar um único pacote ao alvo.
+
+---
+
+## Perspectiva Blue Team
+
+Esses fundamentos são usados diariamente em operações defensivas:
+
+- **Análise de tráfego (Wireshark):** identificar anomalias exige saber o que é tráfego normal em cada camada
+- **Regras de firewall:** escritas em termos de IP, porta e protocolo — camadas 3 e 4
+- **Detecção de tunelamento DNS:** reconhecer volume anômalo de queries só faz sentido se você entende como o DNS funciona normalmente
+- **Resposta a incidentes:** `ping`, `traceroute` e `whois` são as primeiras ferramentas usadas para mapear um incidente em andamento
+
+---
+
+## Principais Aprendizados
+
+- O modelo OSI é linguagem comum em segurança — saber em qual camada um ataque opera define a resposta
+- TCP e UDP não são intercambiáveis — escolha do protocolo tem implicações diretas em segurança
+- DNS é muito mais que "tradução de nomes" — é infraestrutura crítica e vetor de ataque relevante
+- Ferramentas simples como `ping` e `whois` fazem parte do arsenal de reconhecimento de qualquer analista
+
+---
+
+## Ferramentas Utilizadas
+
+`ping` `traceroute` `whois` `Wireshark`
+
+---
+
+*Writeup por [JoedersonN](https://github.com/JoedersonN) · [TryHackMe Profile](https://tryhackme.com/p/Joe.Sk)*
