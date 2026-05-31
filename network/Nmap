@@ -1,0 +1,220 @@
+# TryHackMe — Nmap
+
+**Plataforma:** TryHackMe  
+**Categoria:** Reconnaissance / Network Scanning  
+**Dificuldade:** Easy  
+**Status:** ✅ Concluída  
+
+---
+
+## Objetivo
+
+Dominar o Nmap — a ferramenta de varredura de redes mais utilizada no mundo — para identificar hosts ativos, portas abertas, serviços em execução, sistemas operacionais e vulnerabilidades potenciais em um alvo.
+
+---
+
+## O que é o Nmap
+
+O Nmap (Network Mapper) é uma ferramenta open source de exploração de redes e auditoria de segurança. Criado por Gordon Lyon em 1997, continua sendo o padrão da indústria para a fase de reconhecimento ativo em pentests e auditorias.
+
+Do ponto de vista do Blue Team, entender o Nmap é entender **como você é visto por um atacante** — e portanto o que monitorar para detectar varreduras.
+
+---
+
+## Tipos de Scan
+
+### -sS — TCP SYN Scan (padrão)
+
+O scan mais utilizado. Envia um pacote SYN e analisa a resposta **sem completar o handshake**:
+
+```
+Atacante → SYN → Alvo
+Atacante ← SYN-ACK ← Alvo  (porta aberta)
+Atacante → RST → Alvo       (encerra sem conectar)
+```
+
+```bash
+nmap -sS 10.10.10.10
+```
+
+**Vantagens:** rápido, relativamente furtivo (não aparece nos logs de aplicação), requer privilégio root.  
+**Detecção:** firewalls e IDS modernos detectam o padrão SYN sem ACK em sequência.
+
+---
+
+### -sT — TCP Connect Scan
+
+Completa o handshake TCP normalmente. Não requer root, mas é mais lento e deixa rastro nos logs do sistema alvo.
+
+```bash
+nmap -sT 10.10.10.10
+```
+
+Usado quando não há privilégios de root disponíveis.
+
+---
+
+### -sU — UDP Scan
+
+Varre portas UDP — mais lento porque UDP não tem resposta obrigatória. Portas fechadas retornam ICMP "port unreachable"; portas abertas simplesmente não respondem (ou respondem com dado específico do serviço).
+
+```bash
+nmap -sU 10.10.10.10
+```
+
+Essencial para encontrar serviços como DNS (53), DHCP (67/68), SNMP (161) e NTP (123) — frequentemente ignorados em varreduras TCP-only.
+
+---
+
+### -sn — Ping Scan (Host Discovery)
+
+Descobre quais hosts estão ativos em uma rede sem varrer portas.
+
+```bash
+nmap -sn 192.168.1.0/24
+```
+
+Primeiro passo em uma varredura de rede — mapear o que está vivo antes de aprofundar.
+
+---
+
+## Flags Essenciais
+
+| Flag | Função |
+|---|---|
+| `-p 80,443` | Escaneia apenas as portas especificadas |
+| `-p 1-1000` | Range de portas |
+| `-p-` | Todas as 65.535 portas |
+| `-sV` | Detecta versão dos serviços nas portas abertas |
+| `-O` | Detecta o sistema operacional do alvo |
+| `-A` | Modo agressivo: SO + versão + scripts + traceroute |
+| `-T4` | Velocidade agressiva (T0=paranóico, T5=insano) |
+| `-v` | Verbose — exibe progresso em tempo real |
+| `--open` | Mostra apenas portas abertas |
+| `-oN saida.txt` | Salva output em arquivo texto |
+| `-oX saida.xml` | Salva output em XML |
+
+---
+
+## Combinações Práticas
+
+```bash
+# Reconhecimento rápido
+nmap -sV --open -T4 10.10.10.10
+
+# Scan completo com detecção de SO
+nmap -A -p- -T4 10.10.10.10
+
+# Descoberta de rede + scan das máquinas ativas
+nmap -sn 192.168.1.0/24
+nmap -sS -sV -p 22,80,443,445,3389 192.168.1.0/24
+
+# Scan UDP nos serviços mais comuns
+nmap -sU -p 53,67,68,161,123 10.10.10.10
+
+# Salvar resultado para análise posterior
+nmap -A 10.10.10.10 -oN resultado.txt -oX resultado.xml
+```
+
+---
+
+## NSE — Nmap Scripting Engine
+
+O diferencial do Nmap está nos scripts. O NSE permite automatizar tarefas complexas de enumeração e detecção de vulnerabilidades diretamente no scan.
+
+Scripts ficam em `/usr/share/nmap/scripts/` e são organizados por categoria:
+
+| Categoria | Uso |
+|---|---|
+| `auth` | Testa autenticação padrão/vazia |
+| `vuln` | Detecta vulnerabilidades conhecidas |
+| `brute` | Força bruta em serviços |
+| `discovery` | Enumeração de informações |
+| `safe` | Scripts não intrusivos |
+
+```bash
+# Rodar scripts de vulnerabilidade
+nmap --script vuln 10.10.10.10
+
+# Script específico — verificar EternalBlue
+nmap --script smb-vuln-ms17-010 -p 445 10.10.10.10
+
+# Enumeração SMB
+nmap --script smb-enum-shares,smb-enum-users -p 445 10.10.10.10
+
+# Banner grabbing HTTP
+nmap --script http-headers,http-title -p 80,443 10.10.10.10
+
+# Todos os scripts de uma categoria
+nmap --script "discovery" 10.10.10.10
+```
+
+---
+
+## Interpretando o Output
+
+```
+PORT     STATE    SERVICE   VERSION
+22/tcp   open     ssh       OpenSSH 7.6p1 Ubuntu
+80/tcp   open     http      Apache httpd 2.4.29
+443/tcp  open     https     Apache httpd 2.4.29
+445/tcp  open     microsoft-ds
+3306/tcp filtered mysql
+8080/tcp closed   http-proxy
+```
+
+| Estado | Significado |
+|---|---|
+| `open` | Porta acessível, serviço respondendo |
+| `closed` | Porta acessível, nenhum serviço respondendo |
+| `filtered` | Firewall ou filtro bloqueando — sem resposta |
+| `open\|filtered` | Incerto — comum em UDP |
+
+---
+
+## Perspectiva Blue Team
+
+Saber usar o Nmap é saber como detectá-lo:
+
+**Assinaturas de detecção no IDS/SIEM:**
+- Múltiplas tentativas de conexão TCP SYN de um mesmo IP em portas sequenciais em curto intervalo
+- Pacotes SYN sem ACK em grande volume → `-sS` scan
+- ICMP seguido de varredura → host discovery + port scan
+- Conexões a portas incomuns como 31337, 1234, 4444 nos resultados
+
+**Regras Snort/Suricata para detecção de Nmap:**
+```
+alert tcp any any -> $HOME_NET any (flags:S; threshold: type threshold, track by_src, count 20, seconds 5; msg:"Possível port scan"; sid:1000001;)
+```
+
+**O que monitorar no SIEM:**
+- Source IP com conexões para 10+ portas distintas em menos de 60 segundos
+- Tentativas de conexão a portas `filtered` (firewall descartando)
+- User-agent `Nmap` em logs HTTP (quando `-A` é usado)
+
+---
+
+## Principais Aprendizados
+
+- O `-sS` é o padrão por ser rápido e relativamente furtivo — mas IDS modernos o detectam facilmente
+- `-p-` é lento mas necessário — serviços em portas não convencionais são comuns em CTFs e ambientes reais mal configurados
+- O NSE transforma o Nmap de scanner em ferramenta de auditoria completa
+- Todo analista Blue Team deveria rodar Nmap na própria rede periodicamente — você precisa saber o que um atacante veria
+
+---
+
+## Referências
+
+- [Nmap Official Documentation](https://nmap.org/docs.html)
+- [NSE Script Database](https://nmap.org/nsedoc/)
+- [MITRE ATT&CK T1046 — Network Service Discovery](https://attack.mitre.org/techniques/T1046/)
+
+---
+
+## Ferramentas Utilizadas
+
+`Nmap` `NSE` `Kali Linux`
+
+---
+
+*Writeup por [JoedersonN](https://github.com/JoedersonN) · [TryHackMe Profile](https://tryhackme.com/p/Joe.Sk)*
